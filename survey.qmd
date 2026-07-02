@@ -1,6 +1,6 @@
 ---
 # Research Competencies Self-Assessment — surveydown app.
-# Modules A (internal) + B (proposed work) + C (research design) + D (data tools).
+# Modules A (internal) + B + C + D; leader-nominate routing (Task A).
 
 theme-settings:
   theme: default
@@ -33,6 +33,8 @@ library(surveydown)
 <!-- ====================================================================== -->
 <!-- MODULE A — Internal (program officer). In production this is a separate  -->
 <!-- officer-facing form; here it seeds routing + drives Module B defaults.   -->
+<!-- Kept as the START page so every respondent has a stable first page; the   -->
+<!-- leader-only nominate page follows and is skipped for non-leaders (app.R). -->
 <!-- ====================================================================== -->
 
 --- a_internal
@@ -67,6 +69,34 @@ sd_question(
   id    = "A3",
   label = "A3. How many key staff are involved in the work? (1–99)"
 )
+```
+
+<!-- ====================================================================== -->
+<!-- NOMINATE — leader-only page (comes AFTER a_internal so the skip fires on  -->
+<!-- page advance). Non-leaders are skipped past it via sd_skip_if(!is_leader).-->
+<!-- Leader enters colleague emails -> tokenized invite links (simulate mode:  -->
+<!-- written to outputs/invites/ + shown on screen).                          -->
+<!-- ====================================================================== -->
+
+--- rt_nominate_page
+
+# Invite your colleagues
+
+*You have been identified as the team lead. Enter the email addresses of the
+colleagues you would like to complete this assessment (comma- or space-separated).
+Each will receive their own personal survey link.*
+
+```{r}
+sd_question(
+  type  = "textarea",
+  id    = "rt_nominate_emails",
+  label = "Colleague email addresses"
+)
+```
+
+```{r}
+shiny::actionButton("rt_nominate_btn", "Generate invite links")
+shiny::uiOutput("rt_nominate_result")
 ```
 
 <!-- ====================================================================== -->

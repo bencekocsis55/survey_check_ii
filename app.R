@@ -16,6 +16,12 @@ source("R/question_bank.R", local = TRUE)  # QBANK, QBANK_MATRIX, PROF_LEVELS
 source("R/piping.R",        local = TRUE)  # pipe_q()
 source("R/skip_logic.R",    local = TRUE)  # has_b1/has_b2/yn, module_c_row_visibility
 source("R/count_grid.R",    local = TRUE)  # register_count_grid()
+source("R/routing.R",       local = TRUE)  # rt_* token/invite routing (Task A)
+
+# Public base URL of THIS deployed app — used to build tokenized invite links.
+# Placeholder until the Connect Cloud Content URL is confirmed; find/replace here.
+APP_BASE_URL <- Sys.getenv("APP_BASE_URL",
+                           "https://YOUR-CONNECT-CLOUD-APP-URL")
 
 # Database (preview mode -> local storage) -----------------------------------
 db <- sd_db_connect()
@@ -41,6 +47,52 @@ server <- function(input, output, session) {
     v <- input[[id]]
     if (is.null(v)) character(0) else as.character(v)
   }
+
+  # --- Respondent routing (Task A) ------------------------------------------
+  # Resolve ?rid=<token> to a respondent, tag responses with their identity, and
+  # expose whether this session is the org LEADER (who gets the nominate step).
+  # Degrades gracefully: in preview mode (db is NULL) routing is inert and the
+  # survey runs standalone.
+  rt_con <- if (is.list(db) && !is.null(db$db)) db$db else NULL
+  respondent <- reactive({
+    pars <- tryCatch(sd_get_url_pars(), error = function(e) NULL)
+    tok  <- if (!is.null(pars) && !is.null(pars$rid)) as.character(pars$rid) else ""
+    if (is.null(rt_con) || !nzchar(tok)) return(NULL)
+    tryCatch(rt_lookup(rt_con, tok), error = function(e) NULL)
+  })
+  is_leader <- reactive({ r <- respondent(); !is.null(r) && identical(r$role, "leader") })
+
+  # Tag every response row with the respondent's identity (if known).
+  observe({
+    r <- respondent()
+    if (is.null(r)) return()
+    sd_store_value(r$token, "rid")
+    sd_store_value(r$email, "respondent_email")
+    sd_store_value(r$org %||% "", "org")
+    if (!is.null(rt_con)) tryCatch(rt_set_status(rt_con, r$token, "started"),
+                                   error = function(e) NULL)
+  })
+
+  # Leader-only nominate step: on submit, create nominee tokens + invites.
+  observeEvent(input$rt_nominate_btn, {
+    if (!is_leader() || is.null(rt_con)) return()
+    emails <- strsplit(input$rt_nominate_emails %||% "", "[,;\\s]+")[[1]]
+    emails <- emails[nzchar(emails)]
+    if (!length(emails)) return()
+    r <- respondent()
+    df <- tryCatch(
+      rt_nominate(rt_con, r$token, emails, base_url = APP_BASE_URL,
+                  send_mode = "simulate"),
+      error = function(e) NULL)
+    output$rt_nominate_result <- renderUI({
+      if (is.null(df)) return(shiny::span("Could not create invites."))
+      shiny::tagList(
+        shiny::p(sprintf("Created %d invite(s):", nrow(df))),
+        shiny::tags$ul(lapply(seq_len(nrow(df)), function(i)
+          shiny::tags$li(shiny::strong(df$email[i]), ": ",
+                         shiny::tags$code(df$link[i])))))
+    })
+  })
 
   # --- Module C count grids -------------------------------------------------
   # Each grid is registered once; rows react to B1/B2/B3 via visible_rows.
@@ -122,6 +174,11 @@ server <- function(input, output, session) {
   ans <- function(id) { v <- input[[id]]; !is.null(v) && any(nzchar(as.character(v))) }
 
   sd_skip_if(
+    # Non-leaders (incl. anyone with no/unknown token) skip the nominate page.
+    # Fires when advancing from a_internal; the nominate page sits between
+    # a_internal and b_proposed, so non-leaders jump straight to b_proposed.
+    (!is_leader())                                                  ~ "b_proposed",
+
     # C2 = No -> skip the study-design grids straight to sampling
     (ans("C2") && !is1("C2"))                                       ~ "c_sampling",
     # No quant sampling experience but qual only -> skip quant grids to prob page
