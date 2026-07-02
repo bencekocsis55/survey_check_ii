@@ -1,0 +1,23 @@
+# Strict allowlist repo — nothing below should ever be committed.
+# (Comments on their OWN lines: git does not strip trailing inline comments.)
+
+# Secrets — DB credentials live only in the host's env vars
+.env
+**/.env
+
+# Any response / preview data
+*.csv
+*.rds
+*.dta
+*.xlsx
+
+# R / editor cruft
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# surveydown render cache (regenerates on deploy)
+_survey/
+*.knit.md
+*.html

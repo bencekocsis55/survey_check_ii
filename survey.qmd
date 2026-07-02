@@ -1,0 +1,210 @@
+---
+# Research Competencies Self-Assessment — surveydown app.
+# Modules A (internal) + B (proposed work) + C (research design), fully wired.
+
+theme-settings:
+  theme: default
+  barposition: top
+  footer-left: "Grantee Research Competencies Self-Assessment"
+  footer-right: "Research Competencies Self-Assessment"
+
+survey-settings:
+  mode: database         # database = persist responses to PostgreSQL (creds via SD_* env vars).
+                         # For local testing WITHOUT a database, flip this to `preview`.
+  show-previous: true
+  use-cookies: false
+  auto-scroll: false
+  rate-survey: false
+  system-language: en
+  highlight-unanswered: true
+  highlight-color: blue
+  capture-metadata: true
+  all-required: false
+  required:
+    - B1
+    - B2
+    - B3
+---
+
+```{r}
+library(surveydown)
+```
+
+<!-- ====================================================================== -->
+<!-- MODULE A — Internal (program officer). In production this is a separate  -->
+<!-- officer-facing form; here it seeds routing + drives Module B defaults.   -->
+<!-- ====================================================================== -->
+
+--- a_internal
+
+# Module A — Internal (Program Officer)
+
+*For context prior to administering the survey to a grantee team, the responsible program officer fills out the following based on the proposal. These answers drive which modules/domains the respondents receive.*
+
+```{r}
+sd_question(
+  type   = "mc_multiple",
+  id     = "A1",
+  label  = "A1. Which grantee research method competencies would you like to assess?",
+  option = c("Qualitative study" = "1", "Quantitative study" = "2", "Review" = "3")
+)
+
+sd_question(
+  type   = "mc_multiple",
+  id     = "A2",
+  label  = "A2. What is the purpose of the research as defined in the proposal?",
+  option = c(
+    "Feasibility or acceptability study" = "1",
+    "Process or performance study"       = "2",
+    "Validation of a measurement tool"   = "3",
+    "Impact / causal inference study"    = "4",
+    "Implementation research"            = "5"
+  )
+)
+
+sd_question(
+  type  = "numeric",
+  id    = "A3",
+  label = "A3. How many key staff are involved in the work? (1–99)"
+)
+```
+
+<!-- ====================================================================== -->
+<!-- MODULE B — Proposed Work (respondent confirms officer's entries).        -->
+<!-- B1/B2/B3 are the master drivers for all downstream skip logic + grids.   -->
+<!-- ====================================================================== -->
+
+--- b_proposed
+
+# Module B — Proposed Work
+
+Thank you for taking the time to complete this self-assessment. It will help us
+understand your team's research skills and offer resources that may strengthen
+them. The following questions were pre-filled by a program officer based on your
+proposal — please confirm they are accurate.
+
+**Proficiency levels used throughout:**
+
+- **Entry / Novice:** developing awareness, building knowledge, limited experience.
+- **Proficiency / Skilled:** applying knowledge routinely, moderate experience, solves problems as they arise.
+- **Mastery / Expert:** using knowledge fluently, extensive experience, sought out for input or mentorship.
+
+```{r}
+sd_question(
+  type   = "mc_multiple",
+  id     = "B1",
+  label  = "B1. Which research methods are included in the proposal?",
+  option = c("Qualitative study" = "1", "Quantitative study" = "2", "Review" = "3")
+)
+
+sd_question(
+  type   = "mc_multiple",
+  id     = "B2",
+  label  = "B2. What is the purpose of the research as defined in the proposal?",
+  option = c(
+    "Feasibility or acceptability study" = "1",
+    "Process or performance study"       = "2",
+    "Validation of a measurement tool"   = "3",
+    "Impact / causal inference study"    = "4",
+    "Implementation research"            = "5"
+  )
+)
+
+sd_question(
+  type  = "numeric",
+  id    = "B3",
+  label = "B3. How many key staff are involved in the work? Key staff are those responsible for technical leadership of the proposed work. (1–99)"
+)
+```
+
+<!-- ====================================================================== -->
+<!-- MODULE C — Research Design                                               -->
+<!-- Grids are rendered from server-side definitions (count_grid.R) so their  -->
+<!-- rows can react to B1/B2/B3. Static questions (C2 gate, C8/C14 matrices)  -->
+<!-- are declared inline.                                                     -->
+<!-- ====================================================================== -->
+
+--- c_formulating_rq
+
+# Module C — Research Design
+
+*This module asks about your team's experience designing studies related to your
+proposal: formulating questions, study design, and sampling design.*
+
+## Formulating research questions
+
+```{r}
+# C1 count grid — rendered from server (rows b–f gate on B2; [q] piped from B1).
+sd_output("C1", type = "question")
+```
+
+--- c_study_design
+
+## Study design
+
+```{r}
+sd_question(
+  type   = "mc_buttons",
+  id     = "C2",
+  label  = "C2. Do key staff have experience designing [quantitative or qualitative] research studies?",
+  option = c("Yes" = "1", "No" = "0")
+)
+
+# C3–C7 grids (shown/hidden via sd_show_if in app.R; C2=No skips the page).
+sd_output("C3", type = "question")
+sd_output("C4", type = "question")
+sd_output("C5", type = "question")
+sd_output("C6", type = "question")
+sd_output("C7", type = "question")
+```
+
+--- c_sampling
+
+## Sampling design
+
+```{r}
+# C8 — yes/no per row (matrix). Rows gate on B1.
+sd_output("C8", type = "question")
+
+# C9 quantitative sampling considerations (shown if C8a or C8b = Yes).
+sd_output("C9", type = "question")
+```
+
+--- c_sampling_prob
+
+### Sampling methods
+
+```{r}
+sd_output("C10", type = "question")   # probability sampling (always shown)
+sd_output("C11", type = "question")   # non-probability sampling (always shown)
+sd_output("C12", type = "question")   # other quant considerations (if C8b = Yes)
+sd_output("C13", type = "question")   # qualitative sampling (if C8c = Yes)
+```
+
+--- c_ethics
+
+## Ethics
+
+```{r}
+# C14 — IRB approval yes/no per row (rows gate on B1).
+sd_output("C14", type = "question")
+
+sd_question(
+  type  = "textarea",
+  id    = "C15",
+  label = "C15. Please note any ethics, confidentiality, or child-protection certificates of key staff. (File upload is enabled in the deployed version.)"
+)
+```
+
+--- end
+
+## End of Modules A–C
+
+Thank you. In the full survey, Modules D–H (Data Collection Tools, Fieldwork,
+Data Analysis, Interpretation, Communicating Findings) follow here.
+
+Your responses are saved locally in preview mode.
+
+```{r}
+sd_close()
+```
