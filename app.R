@@ -1,6 +1,6 @@
 # ============================================================================
-# app.R — Grantee Research Competencies Self-Assessment (surveydown)
-# Research Competencies Self-Assessment — Modules A, B, C.
+# app.R — Research Competencies Self-Assessment (surveydown)
+# Modules A, B, C, D.
 # ----------------------------------------------------------------------------
 # Run from RStudio:  open this file, click "Run App"  (or shiny::runApp())
 # In `mode: preview` (set in survey.qmd) responses save LOCALLY — no AWS / no
@@ -79,6 +79,11 @@ server <- function(input, output, session) {
   }
   render_matrix("C8")
   render_matrix("C14")
+  # Module D yes/no matrices.
+  render_matrix("D1")
+  render_matrix("D2")
+  render_matrix("D4")
+  render_matrix("D6")
 
   # --- Conditional DISPLAY (show a question only if condition holds) --------
   # IMPORTANT: sd_show_if evaluates each condition in THIS server environment,
@@ -89,8 +94,9 @@ server <- function(input, output, session) {
   # is in scope here, and stays in scope because they're defined in the server).
   inc  <- function(id, code) as.character(code) %in% as.character(input[[id]])   # multi-select "includes"
   is1  <- function(id) { v <- input[[id]]; !is.null(v) && as.character(v) == "1" } # yes/no == 1
-  # C8 matrix rows are stored as separate inputs "C8_C8a", "C8_C8b", "C8_C8c".
-  c8   <- function(row) is1(paste0("C8_", row))
+  # Matrix rows are stored as separate inputs "<mid>_<row>", e.g. "C8_C8a".
+  mrow <- function(mid, row) is1(paste0(mid, "_", row))
+  c8   <- function(row) mrow("C8", row)   # back-compat alias for Module C
 
   sd_show_if(
     # C3–C7 require C2 = Yes ("experience designing studies")
@@ -104,6 +110,8 @@ server <- function(input, output, session) {
     c8("C8a") || c8("C8b")       ~ "C9",   # quant sampling considerations
     c8("C8b")                    ~ "C12",  # other quant sampling considerations
     c8("C8c")                    ~ "C13"   # qualitative sampling considerations
+    # (Module D D1 row visibility is handled inside render_matrix via the
+    #  per-row show_if in QBANK_MATRIX, same as C8/C14 — not here.)
   )
 
   # --- Conditional SKIP (jump pages) ----------------------------------------
@@ -118,7 +126,13 @@ server <- function(input, output, session) {
     (ans("C2") && !is1("C2"))                                       ~ "c_sampling",
     # No quant sampling experience but qual only -> skip quant grids to prob page
     (ans("C8_C8a") && ans("C8_C8b") && ans("C8_C8c") &&
-       !c8("C8a") && !c8("C8b") && c8("C8c"))                       ~ "c_sampling_prob"
+       !c8("C8a") && !c8("C8b") && c8("C8c"))                       ~ "c_sampling_prob",
+
+    # --- Module D: each D1 sub-section page is skipped if its D1 row = No.
+    # Guarded by ans() on the row so the rule can't fire before D1 is answered.
+    (ans("D1_D1a") && !mrow("D1", "D1a"))                           ~ "d_surveys",
+    (ans("D1_D1b") && !mrow("D1", "D1b"))                           ~ "d_protocols",
+    (ans("D1_D1c") && !mrow("D1", "D1c"))                           ~ "end"
   )
 
   # --- run --------------------------------------------------------------------

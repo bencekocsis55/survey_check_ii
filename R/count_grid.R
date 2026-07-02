@@ -27,11 +27,21 @@
 # In survey.qmd render it with:  sd_output(qid, type = "question")
 # ============================================================================
 
+# Column set for a grid: the default 3 proficiency levels, or a single
+# "Number of key staff" count column (Modules G/H). Chosen per-question via the
+# `variant` field on the QBANK entry ("prof3" default, "count1" single-column).
+.grid_levels <- function(variant) {
+  if (identical(variant, "count1"))
+    c(n = "Number of key staff")
+  else
+    PROF_LEVELS
+}
+
 # --- serialize the current grid inputs into a named list ------------------
-.grid_collect <- function(input, qid, item_codes) {
+.grid_collect <- function(input, qid, item_codes, levels = PROF_LEVELS) {
   out <- list()
   for (code in item_codes) {
-    for (lv in names(PROF_LEVELS)) {
+    for (lv in names(levels)) {
       key <- paste0(qid, "__", code, "_", lv)     # input id for one cell
       v <- input[[key]]
       out[[paste0(code, "_", lv)]] <- if (is.null(v) || is.na(v)) 0L else as.integer(v)
@@ -41,27 +51,31 @@
 }
 
 # --- build the HTML table of numeric inputs -------------------------------
-.grid_ui <- function(qid, items, b3, visible_codes, getval = NULL) {
+.grid_ui <- function(qid, items, b3, visible_codes, getval = NULL,
+                     levels = PROF_LEVELS) {
   ns_cell <- function(code, lv) paste0(qid, "__", code, "_", lv)
   maxv <- if (is.null(b3) || is.na(b3) || b3 < 1) 99 else b3
+  # A single-count grid has one column already capped at B3 per row, so it
+  # needs no per-row "sum across levels" total or over-cap warning.
+  multi <- length(levels) > 1
 
   header <- shiny::tags$tr(
     shiny::tags$th(style = "text-align:left; width:52%;", ""),
-    lapply(unname(PROF_LEVELS), function(h) shiny::tags$th(style = "text-align:center;", h)),
-    shiny::tags$th(style = "text-align:center; width:8%;", "Row total")
+    lapply(unname(levels), function(h) shiny::tags$th(style = "text-align:center;", h)),
+    if (multi) shiny::tags$th(style = "text-align:center; width:8%;", "Row total")
   )
 
   rows <- lapply(items, function(it) {
     if (!it$item %in% visible_codes) return(NULL)         # per-row skip logic
     label <- pipe_q(it$label, getval)                     # [q] -> quant/qual
-    cells <- lapply(names(PROF_LEVELS), function(lv) {
+    cells <- lapply(names(levels), function(lv) {
       shiny::tags$td(
         style = "text-align:center;",
         shiny::numericInput(ns_cell(it$item, lv), label = NULL,
                             value = NA, min = 0, max = maxv, step = 1, width = "80px")
       )
     })
-    total_out <- shiny::tags$td(
+    total_out <- if (multi) shiny::tags$td(
       style = "text-align:center; font-weight:600;",
       shiny::textOutput(paste0(qid, "__", it$item, "_rowtotal"), inline = TRUE)
     )
@@ -81,7 +95,7 @@
       shiny::tags$thead(header),
       shiny::tags$tbody(rows)
     ),
-    shiny::div(id = paste0(qid, "__warn"),
+    if (multi) shiny::div(id = paste0(qid, "__warn"),
                style = "color:#c0392b; font-weight:600; margin-top:4px;",
                shiny::textOutput(paste0(qid, "__warnmsg")))
   )
@@ -94,6 +108,8 @@ register_count_grid <- function(input, output, session, qid,
   q <- QBANK[[qid]]
   if (is.null(q)) stop(sprintf("count_grid: unknown qid '%s'", qid))
   item_codes <- vapply(q$items, `[[`, character(1), "item")
+  levels <- .grid_levels(q$variant)     # 3 proficiency cols, or 1 count col
+  multi  <- length(levels) > 1
 
   # Reactive: which rows are visible (default all).
   vis <- if (is.null(visible_rows)) shiny::reactive(item_codes) else visible_rows
@@ -103,44 +119,46 @@ register_count_grid <- function(input, output, session, qid,
 
   # Render the grid UI, rebuilding when B3 or visible rows change.
   output[[paste0(qid, "_grid_ui")]] <- shiny::renderUI({
-    .grid_ui(qid, q$items, b3(), vis(), getval)
+    .grid_ui(qid, q$items, b3(), vis(), getval, levels)
   })
 
-  # Per-row running totals + over-cap detection.
-  for (it in q$items) {
-    local({
-      code <- it$item
-      output[[paste0(qid, "__", code, "_rowtotal")]] <- shiny::renderText({
-        s <- sum(vapply(names(PROF_LEVELS), function(lv) {
+  # Per-row running totals + over-cap detection (multi-column grids only).
+  if (multi) {
+    for (it in q$items) {
+      local({
+        code <- it$item
+        output[[paste0(qid, "__", code, "_rowtotal")]] <- shiny::renderText({
+          s <- sum(vapply(names(levels), function(lv) {
+            v <- input[[paste0(qid, "__", code, "_", lv)]]
+            if (is.null(v) || is.na(v)) 0L else as.integer(v)
+          }, integer(1)))
+          as.character(s)
+        })
+      })
+    }
+
+    # Aggregate warning if any visible row exceeds B3.
+    output[[paste0(qid, "__warnmsg")]] <- shiny::renderText({
+      cap <- b3()
+      if (is.null(cap) || is.na(cap) || cap < 1) return("")
+      bad <- character(0)
+      for (code in vis()) {
+        s <- sum(vapply(names(levels), function(lv) {
           v <- input[[paste0(qid, "__", code, "_", lv)]]
           if (is.null(v) || is.na(v)) 0L else as.integer(v)
         }, integer(1)))
-        as.character(s)
-      })
+        if (s > cap) bad <- c(bad, code)
+      }
+      if (length(bad))
+        sprintf("Some rows total more than %d key staff (%s). Please revise.",
+                cap, paste(bad, collapse = ", "))
+      else ""
     })
   }
 
-  # Aggregate warning if any visible row exceeds B3.
-  output[[paste0(qid, "__warnmsg")]] <- shiny::renderText({
-    cap <- b3()
-    if (is.null(cap) || is.na(cap) || cap < 1) return("")
-    bad <- character(0)
-    for (code in vis()) {
-      s <- sum(vapply(names(PROF_LEVELS), function(lv) {
-        v <- input[[paste0(qid, "__", code, "_", lv)]]
-        if (is.null(v) || is.na(v)) 0L else as.integer(v)
-      }, integer(1)))
-      if (s > cap) bad <- c(bad, code)
-    }
-    if (length(bad))
-      sprintf("Some rows total more than %d key staff (%s). Please revise.",
-              cap, paste(bad, collapse = ", "))
-    else ""
-  })
-
   # Serialize the whole grid to JSON and expose it as the stored value.
   grid_value <- shiny::reactive({
-    collected <- .grid_collect(input, qid, vis())
+    collected <- .grid_collect(input, qid, vis(), levels)
     jsonlite::toJSON(collected, auto_unbox = TRUE)
   })
 

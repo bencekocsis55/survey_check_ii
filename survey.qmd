@@ -1,6 +1,6 @@
 ---
 # Research Competencies Self-Assessment — surveydown app.
-# Modules A (internal) + B (proposed work) + C (research design), fully wired.
+# Modules A (internal) + B (proposed work) + C (research design) + D (data tools).
 
 theme-settings:
   theme: default
@@ -9,7 +9,7 @@ theme-settings:
   footer-right: "Research Competencies Self-Assessment"
 
 survey-settings:
-  mode: database         # database = persist responses to PostgreSQL (creds via SD_* env vars).
+  mode: database         # database = persist to PostgreSQL (creds via SD_* env vars).
                          # For local testing WITHOUT a database, flip this to `preview`.
   show-previous: true
   use-cookies: false
@@ -196,12 +196,51 @@ sd_question(
 )
 ```
 
+--- d_tools
+
+## Data Collection Tools
+
+```{r}
+# Module D. D1 selector (D1a/b/c) gates three sub-sections. Rows gate on B1.
+sd_output("D1", type = "question")
+```
+
+--- d_secondary
+
+### Tools to collect secondary data
+
+```{r}
+# Shown only if D1a = Yes (page-skip in app.R). D2 yn matrix + D3 count grid.
+sd_output("D2", type = "question")
+sd_output("D3", type = "question")
+```
+
+--- d_surveys
+
+### Surveys
+
+```{r}
+# Shown only if D1b = Yes. D4 yn matrix + D5 count grid.
+sd_output("D4", type = "question")
+sd_output("D5", type = "question")
+```
+
+--- d_protocols
+
+### Interview and focus group protocols
+
+```{r}
+# Shown only if D1c = Yes. D6 yn matrix + D7 count grid.
+sd_output("D6", type = "question")
+sd_output("D7", type = "question")
+```
+
 --- end
 
-## End of Modules A–C
+## End of Modules A–D
 
-Thank you. In the full survey, Modules D–H (Data Collection Tools, Fieldwork,
-Data Analysis, Interpretation, Communicating Findings) follow here.
+Thank you. In the full survey, Modules E–H (Fieldwork, Data Analysis,
+Interpretation, Communicating Findings) follow here.
 
 Your responses are saved locally in preview mode.
 
